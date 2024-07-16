@@ -1,1 +1,1 @@
-用来构建alist docker推到自己仓库，对就是这么简单
+用来构建alist docker
