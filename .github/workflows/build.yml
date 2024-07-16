@@ -36,7 +36,7 @@ jobs:
         run: bash build.sh prepare docker-multiplatform
         
       - name: Build go binary
-        run: bash build.sh dev docker-multiplatform
+        run: bash build.sh dev docker
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
