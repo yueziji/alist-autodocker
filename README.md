@@ -1,1 +1,1 @@
-用来构建alist docker
+to build alist docker
