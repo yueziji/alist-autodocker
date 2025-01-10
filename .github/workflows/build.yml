@@ -52,7 +52,7 @@ jobs:
           
       - name: Modify Dockerfile.ci
         run: |
-          sed -i '/COPY \/build\/\${TARGETPLATFORM}\/alist .\//c\COPY ./bin/alist ./' Dockerfile.ci
+          sed -i '/COPY \/build\/\${TARGETPLATFORM}\/alist .\//c\COPY /bin/alist ./' Dockerfile.ci
 
       - name: Build and push
         id: docker_build
