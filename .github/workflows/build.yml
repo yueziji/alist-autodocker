@@ -53,7 +53,13 @@ jobs:
       - name: Modify Dockerfile.ci
         run: |
           sed -i '/COPY \/build\/\${TARGETPLATFORM}\/alist .\//c\COPY /bin/alist ./' Dockerfile.ci
+      
+      - name: test
+        run: |
+          pwd
+          ls
 
+          
       - name: Build and push
         id: docker_build
         uses: docker/build-push-action@v5
