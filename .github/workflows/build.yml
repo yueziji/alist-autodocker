@@ -50,12 +50,6 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           
 
-      
-      - name: test
-        run: |
-          pwd
-          cd bin
-          ls
 
           
       - name: Build and push
