@@ -35,8 +35,7 @@ jobs:
         if: steps.cache-musl.outputs.cache-hit != 'true'
         run: bash build.sh prepare docker-multiplatform
         
-      - name: Build go binary
-        run: bash build.sh dev docker
+
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -64,7 +63,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: Dockerfile.ci
+          file: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
