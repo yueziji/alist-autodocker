@@ -11,7 +11,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: alist-org/alist
+          repository: AlistGo/alist
           ref: main
           
       - name: Docker meta
