@@ -1,33 +1,34 @@
-# .github/workflows/build-v4-repo.yml
+# .github/workflows/manual-build-openlist-v4-simple.yml
 
-name: Manual Build OpenListTeam v4
+name: Manual Build OpenList v4 (Simple)
 
 on:
   # 仅允许通过 GitHub Actions UI 手动触发
   workflow_dispatch:
 
 jobs:
-  build_and_push_v4:
-    name: Build Docker from OpenListTeam/OpenList
+  build_and_push_simple:
+    name: Build and Push Base Docker Image
     runs-on: ubuntu-latest
+    permissions:
+      # Docker a GCR/GHCR 需要 packages: write 权限
+      packages: write
+
     steps:
-      # 步骤 1: 检出您想要构建的 V4 仓库
+      # 步骤 1: 检出 OpenListTeam/OpenList 仓库
+      # !!! 您可以根据需要修改 ref 来构建不同的分支
       - name: Checkout OpenListTeam/OpenList Repository
         uses: actions/checkout@v4
         with:
           repository: 'OpenListTeam/OpenList'
           ref: 'main'
-          
-      # 步骤 2: 获取所有需要的版本信息
-      - name: Get Version Information
-        id: get_info
-        run: |
-          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          echo "author=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
-          # 使用 git describe 获取最接近的标签作为版本号，如果没有标签则使用 SHA
-          echo "version=$(git describe --tags --always)" >> $GITHUB_OUTPUT
 
-      # 步骤 3: 【核心】设置 Docker 元数据
+      # 步骤 2: 获取仓库的 Commit SHA，用于 Docker 标签
+      - name: Get Commit SHA
+        id: get_sha
+        run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      # 步骤 3: 设置 Docker 元数据，使用 Commit SHA 作为唯一标签
       # !!! 重要: 将 'images' 修改为您自己的 Docker Hub 镜像名称
       - name: Docker meta
         id: meta
@@ -35,53 +36,66 @@ jobs:
         with:
           images: 'yueziji/testlist'
           tags: |
-            type=raw,value=${{ steps.get_info.outputs.sha }}
+            type=raw,value=${{ steps.get_sha.outputs.sha }}
 
       # 步骤 4: 安装 Go 语言环境
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: 'stable' # 或者指定项目需要的特定版本
+          go-version: 'stable'
 
-      # 步骤 5: 【核心】编译 Go 二进制文件，并注入所有版本信息
-      # 我们将所有 ldflags 组合起来，并通过环境变量传递给构建命令
-      # 注意：这里的构建命令假设为 `go build`，如果项目有 Makefile，则应改为 `make build`
-      - name: Build Go Binaries with Version Injection
+      # 步骤 5: 缓存 Musl 交叉编译工具链以加快构建速度
+      # (完全复刻自原版工作流)
+      - name: Cache Musl
+        id: cache-musl
+        uses: actions/cache@v4
+        with:
+          path: build/musl-libs
+          key: docker-musl-libs-v2
+
+      # 步骤 6: 如果缓存未命中，则下载 Musl 库
+      # (完全复刻自原版工作流)
+      - name: Download Musl Library
+        if: steps.cache-musl.outputs.cache-hit != 'true'
+        run: bash build.sh prepare docker-multiplatform
         env:
-          # 将所有 ldflags 定义在一个环境变量中，以便传递
-          INJECT_LDFLAGS: >-
-            -w -s
-            -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.BuiltAt=$(date -u +'%Y-%m-%d %H:%M:%S')'
-            -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.GitAuthor=${{ steps.get_info.outputs.author }}'
-            -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.GitCommit=${{ steps.get_info.outputs.sha }}'
-            -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${{ steps.get_info.outputs.version }}'
-            -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=${{ steps.get_info.outputs.version }}'
-        # 编译命令：直接使用 go build 并传入 ldflags。
-        # 这里的 output 路径和 main.go 路径需要根据新仓库的结构确认。
-        run: |
-          go build -ldflags="$INJECT_LDFLAGS" -o ./openlist ./cmd/server/
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 步骤 6: 设置 QEMU 和 Docker Buildx
+      # 步骤 7: 【核心】编译所有平台二进制文件
+      # 我们运行和原版工作流完全相同的命令。
+      # build.sh 脚本会自动处理版本注入和前端文件下载。
+      - name: Build Go Binaries (beta)
+        run: bash build.sh beta docker-multiplatform
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 如果需要，可以覆盖前端仓库
+          # FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
+
+      # 步骤 8: 设置 QEMU 和 Docker Buildx (用于多平台镜像构建)
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 步骤 7: 登录到 DockerHub
+      # 步骤 9: 登录到 DockerHub
       - name: Login to DockerHub
         uses: docker/login-action@v3
         with:
           username: yueziji
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 步骤 8: 构建并推送 Docker 镜像
-      # 注意：这里的 'file' 需要使用新仓库中的 Dockerfile
+      # 步骤 10: 【核心】构建并推送 Docker 镜像
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile # 假设新仓库使用根目录的 Dockerfile
+          # 使用为 CI/CD 设计的 Dockerfile.ci
+          file: Dockerfile.ci
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
+          # 构建所有平台，与原版工作流保持一致
+          platforms: 'linux/amd64'
+          # 硬编码构建参数，确保只构建 'base' 镜像
+          build-args: |
+            BASE_IMAGE_TAG=base
