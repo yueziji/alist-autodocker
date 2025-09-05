@@ -67,6 +67,7 @@ jobs:
       # build.sh 脚本会自动处理版本注入和前端文件下载。
       - name: Build Go Binaries (beta)
         run: |
+          sed -i -e 's/^\s*OS_ARCHES=/#&/' -e 's/^\s*CGO_ARGS=/#&/' -e 's/^\s*DOCKER_ARM_ARCHES=/#&/' build.sh
           # 1. 只保留 amd64 平台
           export OS_ARCHES=(linux-amd64)
           # 2. 指定 amd64 对应的交叉编译器
