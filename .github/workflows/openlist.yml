@@ -1,6 +1,6 @@
 # .github/workflows/manual-build-openlist-v4-simple.yml
 
-name: Manual Build OpenList v4 (Simple)
+name: Build OpenList
 
 on:
   # 仅允许通过 GitHub Actions UI 手动触发
