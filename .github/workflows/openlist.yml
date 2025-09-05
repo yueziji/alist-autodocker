@@ -67,13 +67,12 @@ jobs:
       # build.sh 脚本会自动处理版本注入和前端文件下载。
       - name: Build Go Binaries (beta)
         run: |
-          sed -i "s/^  OS_ARCHES=.*/  OS_ARCHES=(linux-amd64)/" build.sh
-          sed -i "s/^  CGO_ARGS=.*/  CGO_ARGS=(x86_64-linux-musl-gcc)/" build.sh
-          sed -i "s/^  DOCKER_ARM_ARCHES=.*/  DOCKER_ARM_ARCHES=()/" build.sh
-          echo "--- Patched build.sh content ---"
-          grep -C 2 "OS_ARCHES" build.sh
-          echo "------------------------------"
-
+          # sed -i "s/^  OS_ARCHES=.*/  OS_ARCHES=(linux-amd64)/" build.sh
+          # sed -i "s/^  CGO_ARGS=.*/  CGO_ARGS=(x86_64-linux-musl-gcc)/" build.sh
+          # sed -i "s/^  DOCKER_ARM_ARCHES=.*/  DOCKER_ARM_ARCHES=()/" build.sh
+          # echo "--- Patched build.sh content ---"
+          # grep -C 2 "OS_ARCHES" build.sh
+          # echo "------------------------------"
           bash build.sh beta docker-multiplatform
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
