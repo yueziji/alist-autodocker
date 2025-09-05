@@ -67,15 +67,13 @@ jobs:
       # build.sh 脚本会自动处理版本注入和前端文件下载。
       - name: Build Go Binaries (beta)
         run: |
-          sed -i -e 's/^\s*OS_ARCHES=/#&/' -e 's/^\s*CGO_ARGS=/#&/' -e 's/^\s*DOCKER_ARM_ARCHES=/#&/' build.sh
-          # 1. 只保留 amd64 平台
-          export OS_ARCHES=(linux-amd64)
-          # 2. 指定 amd64 对应的交叉编译器
-          export CGO_ARGS=(x86_64-linux-musl-gcc)
-          # 3. 清空专门用于 ARM 的数组，确保那部分循环不会执行
-          export DOCKER_ARM_ARCHES=()
+          sed -i "s/^  OS_ARCHES=.*/  OS_ARCHES=(linux-amd64)/" build.sh
+          sed -i "s/^  CGO_ARGS=.*/  CGO_ARGS=(x86_64-linux-musl-gcc)/" build.sh
+          sed -i "s/^  DOCKER_ARM_ARCHES=.*/  DOCKER_ARM_ARCHES=()/" build.sh
+          echo "--- Patched build.sh content ---"
+          grep -C 2 "OS_ARCHES" build.sh
+          echo "------------------------------"
 
-          # 4. 现在，像往常一样调用脚本。它将使用我们上面定义的、被缩减的数组。
           bash build.sh beta docker-multiplatform
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
