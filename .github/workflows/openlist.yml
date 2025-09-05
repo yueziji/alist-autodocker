@@ -1,0 +1,87 @@
+# .github/workflows/build-v4-repo.yml
+
+name: Manual Build OpenListTeam v4
+
+on:
+  # 仅允许通过 GitHub Actions UI 手动触发
+  workflow_dispatch:
+
+jobs:
+  build_and_push_v4:
+    name: Build Docker from OpenListTeam/OpenList
+    runs-on: ubuntu-latest
+    steps:
+      # 步骤 1: 检出您想要构建的 V4 仓库
+      - name: Checkout OpenListTeam/OpenList Repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'OpenListTeam/OpenList'
+          ref: 'main'
+          
+      # 步骤 2: 获取所有需要的版本信息
+      - name: Get Version Information
+        id: get_info
+        run: |
+          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "author=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
+          # 使用 git describe 获取最接近的标签作为版本号，如果没有标签则使用 SHA
+          echo "version=$(git describe --tags --always)" >> $GITHUB_OUTPUT
+
+      # 步骤 3: 【核心】设置 Docker 元数据
+      # !!! 重要: 将 'images' 修改为您自己的 Docker Hub 镜像名称
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: 'yueziji/testlist'
+          tags: |
+            type=raw,value=${{ steps.get_info.outputs.sha }}
+
+      # 步骤 4: 安装 Go 语言环境
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable' # 或者指定项目需要的特定版本
+
+      # 步骤 5: 【核心】编译 Go 二进制文件，并注入所有版本信息
+      # 我们将所有 ldflags 组合起来，并通过环境变量传递给构建命令
+      # 注意：这里的构建命令假设为 `go build`，如果项目有 Makefile，则应改为 `make build`
+      - name: Build Go Binaries with Version Injection
+        env:
+          # 将所有 ldflags 定义在一个环境变量中，以便传递
+          INJECT_LDFLAGS: >-
+            -w -s
+            -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.BuiltAt=$(date -u +'%Y-%m-%d %H:%M:%S')'
+            -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.GitAuthor=${{ steps.get_info.outputs.author }}'
+            -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.GitCommit=${{ steps.get_info.outputs.sha }}'
+            -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.Version=${{ steps.get_info.outputs.version }}'
+            -X 'github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=${{ steps.get_info.outputs.version }}'
+        # 编译命令：直接使用 go build 并传入 ldflags。
+        # 这里的 output 路径和 main.go 路径需要根据新仓库的结构确认。
+        run: |
+          go build -ldflags="$INJECT_LDFLAGS" -o ./openlist ./cmd/server/
+
+      # 步骤 6: 设置 QEMU 和 Docker Buildx
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 步骤 7: 登录到 DockerHub
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: yueziji
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 步骤 8: 构建并推送 Docker 镜像
+      # 注意：这里的 'file' 需要使用新仓库中的 Dockerfile
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile # 假设新仓库使用根目录的 Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
