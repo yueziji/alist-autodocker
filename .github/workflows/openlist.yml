@@ -22,6 +22,7 @@ jobs:
         with:
           repository: 'OpenListTeam/OpenList'
           ref: 'main'
+          fetch-depth: 0
 
       # 步骤 2: 获取仓库的 Commit SHA，用于 Docker 标签
       - name: Get Commit SHA
@@ -65,7 +66,16 @@ jobs:
       # 我们运行和原版工作流完全相同的命令。
       # build.sh 脚本会自动处理版本注入和前端文件下载。
       - name: Build Go Binaries (beta)
-        run: bash build.sh beta docker-multiplatform
+        run: |
+          # 1. 只保留 amd64 平台
+          export OS_ARCHES=(linux-amd64)
+          # 2. 指定 amd64 对应的交叉编译器
+          export CGO_ARGS=(x86_64-linux-musl-gcc)
+          # 3. 清空专门用于 ARM 的数组，确保那部分循环不会执行
+          export DOCKER_ARM_ARCHES=()
+
+          # 4. 现在，像往常一样调用脚本。它将使用我们上面定义的、被缩减的数组。
+          bash build.sh beta docker-multiplatform
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # 如果需要，可以覆盖前端仓库
