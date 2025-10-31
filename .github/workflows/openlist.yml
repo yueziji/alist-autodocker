@@ -38,6 +38,7 @@ jobs:
           images: 'yueziji/testlist'
           tags: |
             type=raw,value=${{ steps.get_sha.outputs.sha }}
+            type=raw,value=latest
 
       # 步骤 4: 安装 Go 语言环境
       - name: Setup Go
