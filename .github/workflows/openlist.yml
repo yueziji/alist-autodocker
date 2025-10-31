@@ -1,6 +1,6 @@
 # .github/workflows/manual-build-openlist-v4-simple.yml
 
-name: Build OpenList
+name: Build Modified OpenList (with Self-Fixing Permissions)
 
 on:
   # 仅允许通过 GitHub Actions UI 手动触发
@@ -8,7 +8,7 @@ on:
 
 jobs:
   build_and_push_simple:
-    name: Build and Push Base Docker Image
+    name: Build and Push Self-Fixing Docker Image
     runs-on: ubuntu-latest
     permissions:
       # Docker a GCR/GHCR 需要 packages: write 权限
@@ -16,7 +16,6 @@ jobs:
 
     steps:
       # 步骤 1: 检出 OpenListTeam/OpenList 仓库
-      # !!! 您可以根据需要修改 ref 来构建不同的分支
       - name: Checkout OpenListTeam/OpenList Repository
         uses: actions/checkout@v4
         with:
@@ -30,12 +29,11 @@ jobs:
         run: echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       # 步骤 3: 设置 Docker 元数据，使用 Commit SHA 作为唯一标签
-      # !!! 重要: 将 'images' 修改为您自己的 Docker Hub 镜像名称
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: 'yueziji/testlist'
+          images: 'yueziji/testlist' # !!! 这里是您的镜像名称，保持不变
           tags: |
             type=raw,value=${{ steps.get_sha.outputs.sha }}
             type=raw,value=latest
@@ -47,7 +45,6 @@ jobs:
           go-version: 'stable'
 
       # 步骤 5: 缓存 Musl 交叉编译工具链以加快构建速度
-      # (完全复刻自原版工作流)
       - name: Cache Musl
         id: cache-musl
         uses: actions/cache@v4
@@ -56,16 +53,13 @@ jobs:
           key: docker-musl-libs-v2
 
       # 步骤 6: 如果缓存未命中，则下载 Musl 库
-      # (完全复刻自原版工作流)
       - name: Download Musl Library
         if: steps.cache-musl.outputs.cache-hit != 'true'
         run: bash build.sh prepare docker-multiplatform
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 步骤 7: 【核心】编译所有平台二进制文件
-      # 我们运行和原版工作流完全相同的命令。
-      # build.sh 脚本会自动处理版本注入和前端文件下载。
+      # 步骤 7: 编译所有平台二进制文件
       - name: Build Go Binaries (beta)
         run: |
           sed -i "s/^  OS_ARCHES=.*/  OS_ARCHES=(linux-amd64)/" build.sh
@@ -77,10 +71,26 @@ jobs:
           bash build.sh beta docker-multiplatform
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 如果需要，可以覆盖前端仓库
-          # FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
 
-      # 步骤 8: 设置 QEMU 和 Docker Buildx (用于多平台镜像构建)
+      
+      - name: "📝 Modify Dockerfile for Self-Fixing Permissions"
+        run: |
+          echo "--- Original Dockerfile.ci content ---"
+          cat Dockerfile.ci
+          echo "--------------------------------------"
+          
+          # 1. 删除 USER 指令，确保容器以 root 启动
+          sed -i '/^USER \${USER}/d' Dockerfile.ci
+          
+          # 2. 将 CMD 指令替换为我们的自修复命令
+          #    这个命令会先以 root 身份 chown，然后降权为 openlist 用户执行原始的 entrypoint
+          sed -i '/^CMD/c\CMD [ "/bin/bash", "-c", "chown -R 1001:1001 /opt/openlist/data && su openlist -c /entrypoint.sh" ]' Dockerfile.ci
+
+          echo "--- Modified Dockerfile.ci content ---"
+          cat Dockerfile.ci
+          echo "--------------------------------------"
+
+      # 步骤 8: 设置 QEMU 和 Docker Buildx
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -93,18 +103,16 @@ jobs:
           username: yueziji
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 步骤 10: 【核心】构建并推送 Docker 镜像
+      # 步骤 10: 构建并推送 Docker 镜像 (现在会使用我们修改后的 Dockerfile.ci)
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
-          # 使用为 CI/CD 设计的 Dockerfile.ci
+          # 使用已被我们动态修改的 Dockerfile.ci
           file: Dockerfile.ci
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # 构建所有平台，与原版工作流保持一致
           platforms: 'linux/amd64'
-          # 硬编码构建参数，确保只构建 'base' 镜像
           build-args: |
             BASE_IMAGE_TAG=base
